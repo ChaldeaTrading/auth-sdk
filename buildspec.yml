@@ -1,0 +1,35 @@
+version: 0.2
+
+env:
+  variables:
+    RELEASE_TAG: ""
+    TWINE_NON_INTERACTIVE: "1"
+
+phases:
+  install:
+    runtime-versions:
+      python: 3.12
+    commands:
+      - python -m pip install '.[test]' build twine
+  pre_build:
+    commands:
+      - python -m pip install 'PyJWT[crypto]==2.8.0'
+      - python -m pytest -q
+      - python -m pip install 'PyJWT[crypto]==2.10.0'
+      - python -m pytest -q
+      - python -m pip install --upgrade 'PyJWT[crypto]>=2.8,<3'
+      - python -m pytest -q
+  build:
+    commands:
+      - python -m build
+      - python -m twine check dist/*
+      - |
+        if [ -n "$RELEASE_TAG" ]; then
+          python scripts/validate_release.py && python -m twine upload dist/*
+        fi
+
+artifacts:
+  base-directory: dist
+  files:
+    - '*.whl'
+    - '*.tar.gz'

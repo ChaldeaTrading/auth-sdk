@@ -1,0 +1,91 @@
+name: Python auth SDK
+
+on:
+  push:
+    branches: ['main']
+    tags:
+      - 'auth-sdk-python-v*'
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        python: ['3.11', '3.12']
+        pyjwt: ['2.8.0', '2.10.0', 'latest']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Install dependencies
+        run: python -m pip install '.[test]'
+
+      - name: Install compatibility PyJWT version
+        if: matrix.pyjwt != 'latest'
+        run: python -m pip install 'PyJWT[crypto]==${{ matrix.pyjwt }}'
+
+      - name: Test
+        run: python -m pytest -q
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install build tools
+        run: python -m pip install build twine
+
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: python scripts/validate_release.py --tag-only
+
+      - name: Build and check distributions
+        run: python -m build && python -m twine check dist/*
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auth-sdk-dist
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/auth-sdk-python-v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment: python-packages
+    env:
+      RELEASE_TAG: ${{ github.ref_name }}
+      TWINE_REPOSITORY_URL: ${{ vars.PYTHON_PACKAGE_UPLOAD_URL }}
+      TWINE_USERNAME: ${{ secrets.PYTHON_PACKAGE_USERNAME }}
+      TWINE_PASSWORD: ${{ secrets.PYTHON_PACKAGE_PASSWORD }}
+      TWINE_NON_INTERACTIVE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-sdk-dist
+          path: dist
+      - name: Validate private registry configuration
+        run: python scripts/validate_release.py
+      - run: python -m pip install twine
+      - name: Publish fixed version
+        run: python -m twine upload dist/*
