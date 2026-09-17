@@ -1,17 +1,38 @@
 # auth-sdk-python
 
 `auth-sdk` is a Python backend authentication package for services using
-Keycloak. Version `0.1.0` supports Python 3.11/3.12 and provides
+Keycloak. Version `0.2.0` supports Python 3.11/3.12 and provides
 framework-independent JWT verification and an optional FastAPI adapter.
 
-## Install
+## Local wheel build (current integration)
+
+Build one versioned artifact and pass that exact artifact into every consumer:
+
+```bash
+python scripts/build_wheel.py
+# Record the printed AUTH_SDK_WHEEL_SHA256 value for this release.
+python scripts/validate_wheel.py dist/0.2.0/auth_sdk-0.2.0-py3-none-any.whl \
+  --version 0.2.0 --sha256 "$AUTH_SDK_WHEEL_SHA256"
+python -m pip install dist/0.2.0/auth_sdk-0.2.0-py3-none-any.whl
+```
+
+`AUTH_SDK_WHEEL_SHA256` is the expected checksum recorded for the release.
+Container publishers take a named BuildKit context `auth-sdk-wheel` containing
+that wheel and `validate_wheel.py`, plus `AUTH_SDK_WHEEL_SHA256` as a build argument.
+They validate metadata and digest, install the explicit wheel, and install the
+application's normal dependencies with `auth-sdk==0.2.0` pinned. Missing or
+mismatched artifacts fail the build. No registry or publishing credentials are
+needed for this mode. Keep wheel version and checksum in the release record;
+future GitHub hosting does not change the artifact validation contract.
+
+## Private registry installation (optional)
 
 Configure pip to use your private Python registry, then install a fixed version:
 
 ```bash
-python -m pip install 'auth-sdk==0.1.0'
+python -m pip install 'auth-sdk==0.2.0'
 # For FastAPI applications:
-python -m pip install 'auth-sdk[fastapi]==0.1.0'
+python -m pip install 'auth-sdk[fastapi]==0.2.0'
 ```
 
 Use the private registry's `/simple/` index endpoint for installation, which may
@@ -85,8 +106,8 @@ The SDK does not query application databases, decide resource ownership, or
 filter business data. Those rules remain in each service. Directory identifiers
 such as `feishu_union_id` are optional claims; Permission Center checks them only
 when required by its own routes. Permission Center also retains service-role
-checks and administrator authorization. Outgoing service credentials and the
-permission-center HTTP client are outside version 0.1.0.
+checks and administrator authorization. Service credentials and Permission Center calls are supported in version 0.2.0
+using the clients below; resource ownership remains a business concern.
 
 ## Release
 
@@ -129,8 +150,53 @@ To build and validate the first release locally:
 python -m pip install build twine
 python -m build
 python -m twine check dist/*
-python -m pip install dist/auth_sdk-0.1.0-py3-none-any.whl
+python -m pip install dist/auth_sdk-0.2.0-py3-none-any.whl
 ```
 
 Building a local wheel does not publish it. Consumers must update their exact
 version pins together with each SDK release.
+
+## Service APIs and outbound calls
+
+```python
+from auth_sdk import ServiceAuthConfig, verify_service_token
+
+service_config = ServiceAuthConfig(
+    issuer=issuer, jwks_url=jwks_url, audience="tool-gateway-api",
+    allowed_service_clients={"shop-rag"}, required_roles={"product:read"},
+)
+claims = verify_service_token(authorization, service_config)
+```
+
+The target role list must contain **all** configured required roles. Service
+clients must be exclusive confidential clients with user grants disabled in
+Keycloak, and must never appear in user client allowlists. A valid token with
+missing roles raises `PermissionDenied` (403); an invalid token raises
+`AuthError` (401). Configuration failure must block startup or return 503.
+Catch `PermissionDenied` before `AuthError` because it is a subclass.
+
+```python
+import httpx
+from auth_sdk import PermissionClient, ServiceTokenProvider
+
+permissions = PermissionClient("https://permission.test.example")
+allowed = await permissions.aauthorize(user_authorization, "shop-rag", "admin")
+# Only allowed is True permits the business operation.
+
+provider = ServiceTokenProvider(token_url, client_id, client_secret)
+async with httpx.AsyncClient(
+    base_url=target_url,
+    auth=provider.auth(allowed_origins={target_url}),
+    follow_redirects=False, timeout=10,
+) as client:
+    response = await client.get("/api/v1/tool/shop/list")
+```
+
+Reuse the provider per configured client identity. Cache refreshes are coalesced
+across threads and asynchronous tasks; failures never reuse an expired token.
+Origins are validated before fetching or attaching credentials. Without explicit
+`allowed_origins`, auth construction fails. Keep redirect following disabled.
+Permission and token endpoints require HTTPS, with
+HTTP allowed only for loopback development. `DependencyUnavailable` maps to
+503, and contains no upstream body, token or secret. The SDK never retries a
+business request or replays a non-idempotent write.

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "auth-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "Framework-independent JWT authentication SDK"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
-dependencies = ["PyJWT[crypto]>=2.8,<3"]
+dependencies = ["PyJWT[crypto]>=2.8,<3", "httpx>=0.27,<1"]
 
 [project.optional-dependencies]
 fastapi = ["fastapi>=0.111,<0.116"]

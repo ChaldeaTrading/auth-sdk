@@ -1,1 +1,4 @@
 include scripts/validate_release.py
+
+include scripts/validate_wheel.py
+include scripts/build_wheel.py
