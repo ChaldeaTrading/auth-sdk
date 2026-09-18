@@ -95,7 +95,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/auth-sdk
+      url: https://pypi.org/p/chaldeatrading-auth-sdk
     permissions:
       id-token: write
     steps:
@@ -120,7 +120,7 @@ jobs:
         run: |
           version="${RELEASE_TAG#auth-sdk-python-v}"
           for attempt in 1 2 3 4 5; do
-            python -m pip install --no-cache-dir "auth-sdk[fastapi]==${version}" && break
+            python -m pip install --no-cache-dir "chaldeatrading-auth-sdk[fastapi]==${version}" && break
             if [ "$attempt" = 5 ]; then exit 1; fi
             sleep 15
           done
@@ -135,7 +135,7 @@ jobs:
           import auth_sdk
 
           expected = os.environ["RELEASE_TAG"].removeprefix("auth-sdk-python-v")
-          assert version("auth-sdk") == expected
+          assert version("chaldeatrading-auth-sdk") == expected
           assert auth_sdk.AuthConfig
           assert auth_sdk.verify_token
           assert auth_sdk.require_user

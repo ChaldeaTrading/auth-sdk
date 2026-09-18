@@ -1,7 +1,7 @@
-# auth-sdk-python
+# ChaldeaTrading Auth SDK
 
-`auth-sdk` is a Python backend authentication package for services using
-Keycloak. Version `0.1.0` supports Python 3.11/3.12 and provides
+`chaldeatrading-auth-sdk` is a Python backend authentication package for services using
+Keycloak. Version `0.1.1` supports Python 3.11/3.12 and provides
 framework-independent JWT verification and an optional FastAPI adapter.
 
 ## Install
@@ -10,9 +10,9 @@ Install the package from PyPI. Pin an exact version in applications and deployme
 artifacts:
 
 ```bash
-python -m pip install 'auth-sdk==0.1.0'
+python -m pip install 'chaldeatrading-auth-sdk==0.1.1'
 # For FastAPI applications:
-python -m pip install 'auth-sdk[fastapi]==0.1.0'
+python -m pip install 'chaldeatrading-auth-sdk[fastapi]==0.1.1'
 ```
 
 ## Local development
@@ -81,7 +81,7 @@ filter business data. Those rules remain in each service. Directory identifiers
 such as `feishu_union_id` are optional claims; Permission Center checks them only
 when required by its own routes. Permission Center also retains service-role
 checks and administrator authorization. Outgoing service credentials and the
-permission-center HTTP client are outside version 0.1.0.
+permission-center HTTP client are outside version 0.1.1.
 
 ## Release
 
@@ -97,8 +97,8 @@ a matching `auth-sdk-python-v<version>` tag:
 python -m pytest -q
 python -m build
 python -m twine check dist/*
-git tag auth-sdk-python-v0.1.0
-git push origin auth-sdk-python-v0.1.0
+git tag auth-sdk-python-v0.1.1
+git push origin auth-sdk-python-v0.1.1
 ```
 
 `.github/workflows/publish.yml` tests Python 3.11/3.12 and supported PyJWT
@@ -106,7 +106,7 @@ versions, builds the sdist and wheel once, installs each distribution in a clean
 job, and publishes the same artifacts through PyPI Trusted Publishing. The
 `pypi` GitHub environment and the PyPI Trusted Publisher must both identify
 `ChaldeaTrading/auth-sdk`, `.github/workflows/publish.yml`, and environment
-`pypi`. The publish job uses a short-lived OIDC identity and needs no PyPI API
+`pypi`, with PyPI project name `chaldeatrading-auth-sdk`. The publish job uses a short-lived OIDC identity and needs no PyPI API
 token in GitHub secrets. PyPI releases are immutable, so every release needs a
 new version.
 
@@ -123,7 +123,7 @@ To build and validate the first release locally:
 python -m pip install build twine
 python -m build
 python -m twine check dist/*
-python -m pip install dist/auth_sdk-0.1.0-py3-none-any.whl
+python -m pip install dist/chaldeatrading_auth_sdk-0.1.1-py3-none-any.whl
 ```
 
 Building a local wheel does not publish it. Consumers must update their exact

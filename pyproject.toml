@@ -3,8 +3,8 @@ requires = ["setuptools>=77.0.3"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "auth-sdk"
-version = "0.1.0"
+name = "chaldeatrading-auth-sdk"
+version = "0.1.1"
 description = "Framework-independent JWT authentication SDK"
 readme = "README.md"
 requires-python = ">=3.11,<3.13"
