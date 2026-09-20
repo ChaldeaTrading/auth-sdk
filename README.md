@@ -1,6 +1,6 @@
-# auth-sdk-python
+# ChaldeaTrading Auth SDK
 
-`auth-sdk` is a Python backend authentication package for services using
+`chaldeatrading-auth-sdk` is a Python backend authentication package for services using
 Keycloak. Version `0.2.0` supports Python 3.11/3.12 and provides
 framework-independent JWT verification and an optional FastAPI adapter.
 
@@ -11,35 +11,30 @@ Build one versioned artifact and pass that exact artifact into every consumer:
 ```bash
 python scripts/build_wheel.py
 # Record the printed AUTH_SDK_WHEEL_SHA256 value for this release.
-python scripts/validate_wheel.py dist/0.2.0/auth_sdk-0.2.0-py3-none-any.whl \
+python scripts/validate_wheel.py dist/0.2.0/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl \
   --version 0.2.0 --sha256 "$AUTH_SDK_WHEEL_SHA256"
-python -m pip install dist/0.2.0/auth_sdk-0.2.0-py3-none-any.whl
+python -m pip install dist/0.2.0/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl
 ```
 
 `AUTH_SDK_WHEEL_SHA256` is the expected checksum recorded for the release.
 Container publishers take a named BuildKit context `auth-sdk-wheel` containing
 that wheel and `validate_wheel.py`, plus `AUTH_SDK_WHEEL_SHA256` as a build argument.
 They validate metadata and digest, install the explicit wheel, and install the
-application's normal dependencies with `auth-sdk==0.2.0` pinned. Missing or
+application's normal dependencies with `chaldeatrading-auth-sdk==0.2.0` pinned. Missing or
 mismatched artifacts fail the build. No registry or publishing credentials are
 needed for this mode. Keep wheel version and checksum in the release record;
 future GitHub hosting does not change the artifact validation contract.
 
-## Private registry installation (optional)
+## PyPI installation
 
-Configure pip to use your private Python registry, then install a fixed version:
+Install the package from PyPI. Pin an exact version in applications and deployment
+artifacts:
 
 ```bash
-python -m pip install 'auth-sdk==0.2.0'
+python -m pip install 'chaldeatrading-auth-sdk==0.2.0'
 # For FastAPI applications:
-python -m pip install 'auth-sdk[fastapi]==0.2.0'
+python -m pip install 'chaldeatrading-auth-sdk[fastapi]==0.2.0'
 ```
-
-Use the private registry's `/simple/` index endpoint for installation, which may
-differ from its upload URL. The index must also provide or proxy public
-dependencies. Supply registry credentials through your secret manager or a
-private pip configuration file; do not commit them. See the consumers' Docker
-instructions for mounting pip configuration with BuildKit secrets.
 
 ## Local development
 
@@ -111,38 +106,37 @@ using the clients below; resource ownership remains a business concern.
 
 ## Release
 
-Update the version in `pyproject.toml`, run the test suite and build checks, then
-create a matching `auth-sdk-python-v<version>` tag. Publishing requires an HTTPS
-private PyPI-compatible upload endpoint and externally supplied credentials.
-The shared `scripts/validate_release.py` checks the tag against the package
-version, rejects public PyPI endpoints and URL-embedded credentials, and reports
-configuration errors without including secrets. Configure the registry to
-prohibit replacing an existing version.
+Releases follow the standard Python packaging flow: the source tree and
+`pyproject.toml` are built into both an sdist and a wheel, the distributions are
+checked and installed in clean CI environments, and the verified artifacts are
+published to PyPI.
+
+Update the version in `pyproject.toml`, run the test and build checks, then create
+a matching `auth-sdk-python-v<version>` tag:
+
+```bash
+python -m pytest -q
+python -m build
+python -m twine check dist/*
+git tag auth-sdk-python-v0.2.0
+git push origin auth-sdk-python-v0.2.0
+```
+
+`.github/workflows/publish.yml` tests Python 3.11/3.12 and supported PyJWT
+versions, builds the sdist and wheel once, installs each distribution in a clean
+job, and publishes the same artifacts through PyPI Trusted Publishing. The
+`pypi` GitHub environment and the PyPI Trusted Publisher must both identify
+`ChaldeaTrading/auth-sdk`, `.github/workflows/publish.yml`, and environment
+`pypi`, with PyPI project name `chaldeatrading-auth-sdk`. The publish job uses a short-lived OIDC identity and needs no PyPI API
+token in GitHub secrets. PyPI releases are immutable, so every release needs a
+new version.
 
 The repository's CodeCommit origin uses `buildspec.yml`. Configure a CodeBuild
 project with this repository as its source, an image supporting Python 3.12,
 and an artifact destination. Its ordinary builds test PyJWT 2.8, 2.10.0 (issuer
 regression coverage), and the latest release, build and check wheel/sdist files,
 and expose `dist/` as artifacts.
-Publishing is disabled when `RELEASE_TAG` is empty.
-
-For a release, start CodeBuild with its source version set to
-`auth-sdk-python-v<version>` and set `RELEASE_TAG` to the same tag. The validator
-also accepts a source version of `refs/tags/<tag>`; a branch or commit checkout
-cannot publish merely by setting `RELEASE_TAG`. Configure
-`TWINE_REPOSITORY_URL` as the private upload URL and inject `TWINE_USERNAME` /
-`TWINE_PASSWORD` through CodeBuild's Secrets Manager or Parameter Store
-environment settings. Do not put credentials in the buildspec or use plaintext
-start-build overrides for secrets. The CodeBuild project, CodeCommit source
-connection/triggers, artifact destination, registry, secret mappings and IAM
-access still require external configuration; adding the buildspec creates none
-of those resources and does not publish a release.
-
-If the repository is mirrored to GitHub, `.github/workflows/publish.yml` provides
-the equivalent release path and a Python 3.11/3.12 test matrix. Its
-`python-packages` environment needs variable `PYTHON_PACKAGE_UPLOAD_URL` and
-secrets `PYTHON_PACKAGE_USERNAME` / `PYTHON_PACKAGE_PASSWORD`. Both CI paths use
-the upload URL, which may differ from the registry's pip `/simple/` index URL.
+CodeBuild does not publish; GitHub Actions is the only release path.
 
 To build and validate the first release locally:
 
@@ -150,7 +144,7 @@ To build and validate the first release locally:
 python -m pip install build twine
 python -m build
 python -m twine check dist/*
-python -m pip install dist/auth_sdk-0.2.0-py3-none-any.whl
+python -m pip install dist/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl
 ```
 
 Building a local wheel does not publish it. Consumers must update their exact
@@ -200,3 +194,7 @@ Permission and token endpoints require HTTPS, with
 HTTP allowed only for loopback development. `DependencyUnavailable` maps to
 503, and contains no upstream body, token or secret. The SDK never retries a
 business request or replays a non-idempotent write.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE).

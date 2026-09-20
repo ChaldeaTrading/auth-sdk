@@ -1,10 +1,5 @@
 version: 0.2
 
-env:
-  variables:
-    RELEASE_TAG: ""
-    TWINE_NON_INTERACTIVE: "1"
-
 phases:
   install:
     runtime-versions:
@@ -23,10 +18,6 @@ phases:
     commands:
       - python -m build
       - python -m twine check dist/*
-      - |
-        if [ -n "$RELEASE_TAG" ]; then
-          python scripts/validate_release.py && python -m twine upload dist/*
-        fi
 
 artifacts:
   base-directory: dist

@@ -53,7 +53,7 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: python scripts/validate_release.py --tag-only
+        run: python scripts/validate_release.py
 
       - name: Build and check distributions
         run: python -m build && python -m twine check dist/*
@@ -64,17 +64,12 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  publish:
-    if: startsWith(github.ref, 'refs/tags/auth-sdk-python-v')
+  verify-distributions:
     needs: build
     runs-on: ubuntu-latest
-    environment: python-packages
-    env:
-      RELEASE_TAG: ${{ github.ref_name }}
-      TWINE_REPOSITORY_URL: ${{ vars.PYTHON_PACKAGE_UPLOAD_URL }}
-      TWINE_USERNAME: ${{ secrets.PYTHON_PACKAGE_USERNAME }}
-      TWINE_PASSWORD: ${{ secrets.PYTHON_PACKAGE_PASSWORD }}
-      TWINE_NON_INTERACTIVE: '1'
+    strategy:
+      matrix:
+        artifact: ['wheel', 'sdist']
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -84,8 +79,64 @@ jobs:
         with:
           name: auth-sdk-dist
           path: dist
-      - name: Validate private registry configuration
-        run: python scripts/validate_release.py
-      - run: python -m pip install twine
-      - name: Publish fixed version
-        run: python -m twine upload dist/*
+      - name: Install wheel
+        if: matrix.artifact == 'wheel'
+        run: python -m pip install dist/*.whl
+      - name: Install source distribution
+        if: matrix.artifact == 'sdist'
+        run: python -m pip install dist/*.tar.gz
+      - name: Smoke test installed distribution
+        working-directory: /tmp
+        run: python "$GITHUB_WORKSPACE/scripts/smoke_test_install.py"
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/auth-sdk-python-v')
+    needs: verify-distributions
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/chaldeatrading-auth-sdk
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: auth-sdk-dist
+          path: dist
+      - name: Publish distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+  verify-pypi:
+    if: startsWith(github.ref, 'refs/tags/auth-sdk-python-v')
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install the published release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          version="${RELEASE_TAG#auth-sdk-python-v}"
+          for attempt in 1 2 3 4 5; do
+            python -m pip install --no-cache-dir "chaldeatrading-auth-sdk[fastapi]==${version}" && break
+            if [ "$attempt" = 5 ]; then exit 1; fi
+            sleep 15
+          done
+      - name: Smoke test the published release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import os
+          from importlib.metadata import version
+
+          import auth_sdk
+
+          expected = os.environ["RELEASE_TAG"].removeprefix("auth-sdk-python-v")
+          assert version("chaldeatrading-auth-sdk") == expected
+          assert auth_sdk.AuthConfig
+          assert auth_sdk.verify_token
+          assert auth_sdk.require_user
+          PY
