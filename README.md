@@ -1,7 +1,7 @@
 # ChaldeaTrading Auth SDK
 
 `chaldeatrading-auth-sdk` is a Python backend authentication package for services using
-Keycloak. Version `0.2.0` supports Python 3.11/3.12 and provides
+Keycloak. Version `0.3.0` supports Python 3.11/3.12 and provides
 framework-independent JWT verification and an optional FastAPI adapter.
 
 ## Local wheel build (current integration)
@@ -11,16 +11,19 @@ Build one versioned artifact and pass that exact artifact into every consumer:
 ```bash
 python scripts/build_wheel.py
 # Record the printed AUTH_SDK_WHEEL_SHA256 value for this release.
-python scripts/validate_wheel.py dist/0.2.0/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl \
-  --version 0.2.0 --sha256 "$AUTH_SDK_WHEEL_SHA256"
-python -m pip install dist/0.2.0/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl
+python scripts/validate_wheel.py dist/0.3.0/chaldeatrading_auth_sdk-0.3.0-py3-none-any.whl \
+  --version 0.3.0 --sha256 "$AUTH_SDK_WHEEL_SHA256"
+python -m pip install dist/0.3.0/chaldeatrading_auth_sdk-0.3.0-py3-none-any.whl
 ```
+
+The build helper fixes archive timestamps, so the same source and build toolchain
+produce the same wheel digest.
 
 `AUTH_SDK_WHEEL_SHA256` is the expected checksum recorded for the release.
 Container publishers take a named BuildKit context `auth-sdk-wheel` containing
 that wheel and `validate_wheel.py`, plus `AUTH_SDK_WHEEL_SHA256` as a build argument.
 They validate metadata and digest, install the explicit wheel, and install the
-application's normal dependencies with `chaldeatrading-auth-sdk==0.2.0` pinned. Missing or
+application's normal dependencies with `chaldeatrading-auth-sdk==0.3.0` pinned. Missing or
 mismatched artifacts fail the build. No registry or publishing credentials are
 needed for this mode. Keep wheel version and checksum in the release record;
 future GitHub hosting does not change the artifact validation contract.
@@ -31,9 +34,9 @@ Install the package from PyPI. Pin an exact version in applications and deployme
 artifacts:
 
 ```bash
-python -m pip install 'chaldeatrading-auth-sdk==0.2.0'
+python -m pip install 'chaldeatrading-auth-sdk==0.3.0'
 # For FastAPI applications:
-python -m pip install 'chaldeatrading-auth-sdk[fastapi]==0.2.0'
+python -m pip install 'chaldeatrading-auth-sdk[fastapi]==0.3.0'
 ```
 
 ## Local development
@@ -101,7 +104,7 @@ The SDK does not query application databases, decide resource ownership, or
 filter business data. Those rules remain in each service. Directory identifiers
 such as `feishu_union_id` are optional claims; Permission Center checks them only
 when required by its own routes. Permission Center also retains service-role
-checks and administrator authorization. Service credentials and Permission Center calls are supported in version 0.2.0
+checks and administrator authorization. Service credentials and Permission Center calls are supported in version 0.3.0
 using the clients below; resource ownership remains a business concern.
 
 ## Release
@@ -118,8 +121,8 @@ a matching `auth-sdk-python-v<version>` tag:
 python -m pytest -q
 python -m build
 python -m twine check dist/*
-git tag auth-sdk-python-v0.2.0
-git push origin auth-sdk-python-v0.2.0
+git tag auth-sdk-python-v0.3.0
+git push origin auth-sdk-python-v0.3.0
 ```
 
 `.github/workflows/publish.yml` tests Python 3.11/3.12 and supported PyJWT
@@ -144,7 +147,7 @@ To build and validate the first release locally:
 python -m pip install build twine
 python -m build
 python -m twine check dist/*
-python -m pip install dist/chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl
+python -m pip install dist/chaldeatrading_auth_sdk-0.3.0-py3-none-any.whl
 ```
 
 Building a local wheel does not publish it. Consumers must update their exact
@@ -194,6 +197,27 @@ Permission and token endpoints require HTTPS, with
 HTTP allowed only for loopback development. `DependencyUnavailable` maps to
 503, and contains no upstream body, token or secret. The SDK never retries a
 business request or replays a non-idempotent write.
+
+The source API also provides uncached shop scopes using the original user Bearer:
+
+```python
+from auth_sdk import PermissionClient, PermissionDenied, ShopScope
+
+permissions = PermissionClient("https://permission.test.example")
+scope: ShopScope = await permissions.ashop_scope(user_authorization)
+# Synchronous handlers use permissions.shop_scope(user_authorization).
+if not scope.all_shops and resource.shop_id not in scope.shop_ids:
+    raise PermissionDenied("shop permission denied")
+```
+
+`GET /permission-center/v1/me/shop-scope` must return a boolean `all_shops` and a
+`shop_ids` list of unique, nonblank strings; the SDK exposes IDs as a `frozenset`.
+An empty set with `all_shops=False` grants access to no shops. Fetch the scope for
+each request, then apply it to the actual resource's shop or to the query before
+counting and pagination. Scope checks supplement operation permissions. A 401
+raises `AuthError`, a 403 raises `PermissionDenied`, and other responses, invalid
+JSON, malformed scope data, redirects, or network failures raise
+`DependencyUnavailable`. Redirects are never followed.
 
 ## License
 

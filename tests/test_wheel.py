@@ -14,14 +14,14 @@ def test_wheel_metadata_and_hash(tmp_path):
     spec = importlib.util.spec_from_file_location('validate_wheel', 'scripts/validate_wheel.py')
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    wheel = tmp_path / 'chaldeatrading_auth_sdk-0.2.0-py3-none-any.whl'
+    wheel = tmp_path / 'chaldeatrading_auth_sdk-0.3.0-py3-none-any.whl'
     with ZipFile(wheel, 'w') as package:
         package.writestr(
-            'chaldeatrading_auth_sdk-0.2.0.dist-info/METADATA',
-            'Name: chaldeatrading-auth-sdk\nVersion: 0.2.0\n',
+            'chaldeatrading_auth_sdk-0.3.0.dist-info/METADATA',
+            'Name: chaldeatrading-auth-sdk\nVersion: 0.3.0\n',
         )
     checksum = hashlib.sha256(wheel.read_bytes()).hexdigest()
-    module.validate_wheel(wheel, version='0.2.0', sha256=checksum)
-    for version, digest in [('0.1.0', checksum), ('0.2.0', '0' * 64), ('0.2.0', '')]:
+    module.validate_wheel(wheel, version='0.3.0', sha256=checksum)
+    for version, digest in [('0.2.0', checksum), ('0.3.0', '0' * 64), ('0.3.0', '')]:
         with pytest.raises(ValueError):
             module.validate_wheel(wheel, version=version, sha256=digest)

@@ -18,5 +18,7 @@ assert version(distribution_name) == expected_version
 assert distribution["License-Expression"] == "Apache-2.0"
 assert set(distribution["Requires-Python"].split(",")) == {">=3.11", "<3.13"}
 assert auth_sdk.AuthConfig
+assert auth_sdk.ShopScope
+assert auth_sdk.PermissionClient.ashop_scope
 assert auth_sdk.verify_token
 assert auth_sdk.require_user

@@ -12,6 +12,7 @@ import auth_sdk
 def test_clients_are_public():
     assert hasattr(auth_sdk, 'ServiceTokenProvider')
     assert hasattr(auth_sdk, 'PermissionClient')
+    assert hasattr(auth_sdk, 'ShopScope')
 
 
 def provider(handler, **kwargs):
@@ -104,6 +105,95 @@ def test_permission_contract(status, body, error, result):
     assert requests[0].url.path == '/permission-center/v1/authorize'
     assert requests[0].headers['Authorization'] == 'Bearer user-token'
     assert requests[0].read() == b'{"resource_type":"shop-rag","action":"admin"}'
+
+
+@pytest.mark.parametrize('body', [
+    {'all_shops': True, 'shop_ids': []},
+    {'all_shops': False, 'shop_ids': []},
+    {'all_shops': False, 'shop_ids': ['shop-b', 'shop-a']},
+])
+def test_shop_scope_contract_sync_and_async(body):
+    requests = []
+    def decide(request):
+        requests.append(request)
+        return httpx.Response(200, json=body)
+    client = auth_sdk.PermissionClient('https://permission', transport=httpx.MockTransport(decide))
+    scope = client.shop_scope('Bearer user-token')
+    assert isinstance(scope, auth_sdk.ShopScope)
+    assert scope.all_shops is body['all_shops']
+    assert scope.shop_ids == frozenset(body['shop_ids'])
+    assert asyncio.run(client.ashop_scope('Bearer user-token')) == scope
+    assert len(requests) == 2
+    assert all(request.method == 'GET' for request in requests)
+    assert all(str(request.url) == 'https://permission/permission-center/v1/me/shop-scope' for request in requests)
+    assert all(request.headers['Authorization'] == 'Bearer user-token' for request in requests)
+    assert all(request.content == b'' for request in requests)
+
+
+@pytest.mark.parametrize('body', [
+    None, [], {}, {'all_shops': False}, {'shop_ids': []},
+    {'all_shops': 'false', 'shop_ids': []},
+    {'all_shops': 0, 'shop_ids': []},
+    {'all_shops': 1, 'shop_ids': []},
+    {'all_shops': None, 'shop_ids': []},
+    {'all_shops': False, 'shop_ids': None},
+    {'all_shops': False, 'shop_ids': 'shop-a'},
+    {'all_shops': False, 'shop_ids': {}},
+    {'all_shops': False, 'shop_ids': ['']},
+    {'all_shops': False, 'shop_ids': [' \t']},
+    {'all_shops': False, 'shop_ids': [1]},
+    {'all_shops': False, 'shop_ids': [True]},
+    {'all_shops': False, 'shop_ids': [None]},
+    {'all_shops': False, 'shop_ids': ['shop-a', 'shop-a']},
+    {'all_shops': True, 'shop_ids': ['shop-a', 'shop-a']},
+])
+def test_shop_scope_rejects_malformed_response(body):
+    client = auth_sdk.PermissionClient('https://permission', transport=httpx.MockTransport(
+        lambda _: httpx.Response(200, json=body)))
+    with pytest.raises(auth_sdk.DependencyUnavailable):
+        client.shop_scope('Bearer user-token')
+
+
+@pytest.mark.parametrize('status,error', [
+    (401, auth_sdk.AuthError), (403, auth_sdk.PermissionDenied),
+    (204, auth_sdk.DependencyUnavailable), (404, auth_sdk.DependencyUnavailable),
+    (500, auth_sdk.DependencyUnavailable), (503, auth_sdk.DependencyUnavailable),
+])
+def test_shop_scope_status_contract_sync_and_async(status, error):
+    client = auth_sdk.PermissionClient('https://permission', transport=httpx.MockTransport(
+        lambda _: httpx.Response(status, text='private-upstream-body')))
+    for call in (lambda: client.shop_scope('Bearer user-token'),
+                 lambda: asyncio.run(client.ashop_scope('Bearer user-token'))):
+        with pytest.raises(error) as caught:
+            call()
+        assert type(caught.value) is error
+        assert 'private-upstream-body' not in str(caught.value)
+
+
+def test_shop_scope_rejects_network_failure_invalid_json_and_redirects():
+    requests = []
+    def redirect(request):
+        requests.append(request)
+        return httpx.Response(302, headers={'Location': 'https://unexpected/collect'})
+    def down(request):
+        raise httpx.ConnectError('private-upstream-detail', request=request)
+    for handler in (redirect, down, lambda _: httpx.Response(200, text='private-upstream-detail')):
+        client = auth_sdk.PermissionClient('https://permission', transport=httpx.MockTransport(handler))
+        with pytest.raises(auth_sdk.DependencyUnavailable) as caught:
+            client.shop_scope('Bearer user-token')
+        assert 'private-upstream-detail' not in str(caught.value)
+        assert 'user-token' not in str(caught.value)
+    assert [request.url.host for request in requests] == ['permission']
+
+
+@pytest.mark.parametrize('authorization', [None, '', 'Basic token', 'Bearer'])
+def test_shop_scope_rejects_invalid_bearer_before_request(authorization):
+    requests = []
+    client = auth_sdk.PermissionClient('https://permission', transport=httpx.MockTransport(
+        lambda request: requests.append(request)))
+    with pytest.raises(auth_sdk.AuthError):
+        client.shop_scope(authorization)
+    assert requests == []
 
 
 @pytest.mark.parametrize('url', ['http://remote/token', 'https://user:secret@host/token', 'https://host/token?secret=x', 'file:///secret'])

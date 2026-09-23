@@ -4,6 +4,7 @@ import math
 import re
 import threading
 import time
+from dataclasses import dataclass
 from urllib.parse import urlsplit
 
 import httpx
@@ -122,6 +123,14 @@ class _ServiceAuth(httpx.Auth):
         yield request
 
 
+@dataclass(frozen=True)
+class ShopScope:
+    """Current effective shop access; an empty restricted set allows no shops."""
+
+    all_shops: bool
+    shop_ids: frozenset[str]
+
+
 class PermissionClient:
     """Forward the original user bearer token; only a strict boolean allows."""
 
@@ -157,3 +166,34 @@ class PermissionClient:
 
     async def aauthorize(self, authorization: str | None, resource_type: str, action: str) -> bool:
         return await asyncio.to_thread(self.authorize, authorization, resource_type, action)
+
+    def shop_scope(self, authorization: str | None) -> ShopScope:
+        """Fetch the user's current shop scope without caching it."""
+        token = extract_bearer(authorization)
+        try:
+            with httpx.Client(timeout=self.timeout, follow_redirects=False, trust_env=False,
+                              transport=self._transport) as client:
+                response = client.get(self.base_url + "/permission-center/v1/me/shop-scope",
+                                      headers={"Authorization": "Bearer " + token})
+            if response.status_code == 401:
+                raise AuthError("invalid user token")
+            if response.status_code == 403:
+                raise PermissionDenied("user permission denied")
+            if response.status_code != 200:
+                raise ValueError
+            body = response.json()
+            if not isinstance(body, dict) or type(body.get("all_shops")) is not bool:
+                raise ValueError
+            shop_ids = body.get("shop_ids")
+            if (not isinstance(shop_ids, list)
+                    or any(not isinstance(shop_id, str) or not shop_id.strip() for shop_id in shop_ids)
+                    or len(set(shop_ids)) != len(shop_ids)):
+                raise ValueError
+            return ShopScope(body["all_shops"], frozenset(shop_ids))
+        except (AuthError, PermissionDenied):
+            raise
+        except Exception:
+            raise DependencyUnavailable("permission service unavailable") from None
+
+    async def ashop_scope(self, authorization: str | None) -> ShopScope:
+        return await asyncio.to_thread(self.shop_scope, authorization)
